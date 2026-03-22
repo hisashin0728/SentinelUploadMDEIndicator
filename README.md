@@ -1,0 +1,2 @@
+# SentinelUploadMDEIndicator
+Sentinelインシデント検知時に MDE IoC に自動登録するロジックアプリ
