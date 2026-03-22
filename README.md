@@ -62,9 +62,7 @@ Sentinel インシデント発生
 
 ### Azure Portal からデプロイ
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/YOUR_RAW_JSON_URL)
-
-> **注:** 上記ボタンを使用する場合は、`YOUR_RAW_JSON_URL` を GitHub 上の ARM テンプレート Raw URL に置き換えてください。
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelUploadMDEIndicator%2Frefs%2Fheads%2Fmain%2FSentinelUploadMDEIndicatorV2.json)
 
 ### Azure CLI からデプロイ
 
@@ -106,16 +104,16 @@ New-AzResourceGroupDeployment `
 
 ```
 ┌──────────────────────┐
-│  Microsoft Sentinel   │
-│   (Incident Trigger)  │
+│  Microsoft Sentinel  │
+│   (Incident Trigger) │
 └──────────┬───────────┘
            │ Webhook
            ▼
 ┌──────────────────────┐     REST API      ┌──────────────────────┐
-│     Logic App         │ ───────────────▶  │  Microsoft Defender  │
-│  (Playbook)           │   IoC 登録        │  for Endpoint        │
-│                       │                   │  (Ti.ReadWrite)      │
-│  - IP エンティティ取得 │                   └──────────────────────┘
+│     Logic App        │ ───────────────▶  │  Microsoft Defender  │
+│  (Playbook)          │   IoC 登録        │  for Endpoint        │
+│                      │                   │  (Ti.ReadWrite)      │
+│  - IP エンティティ取得 │                  └──────────────────────┘
 │  - プライベート IP 除外│
 │  - IoC 登録           │
 │  - コメント追加       │
