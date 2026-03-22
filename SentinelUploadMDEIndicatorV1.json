@@ -1,0 +1,184 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "title": "SentinelUploadMDEIndicatorV1",
+        "description": "This playbook registers IoCs to Microsoft Defender for Endpoint based on Sentinel incident.",
+        "lastUpdateTime": "2026-03-19T00:00:00.000Z",
+        "tags": [ "Security" ],
+        "author": {
+            "name": "Microsoft Unified Support"
+        }
+    },
+    "parameters": {
+        "PlayBookName": {
+            "defaultValue": "SentinelUploadMDEIndicator",
+            "type": "String"
+        },
+        "AadTenantId": {
+            "defaultValue": "YourTenantId",
+            "type": "String"
+        },
+        "AadClientId": {
+            "defaultValue": "YourClientId",
+            "type": "String"
+        },
+        "AadClientSecret": {
+            "defaultValue": "YourClientSecret",
+            "type": "String"
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlayBookName'))]",
+        "MicrosoftSentinelConnectionApiId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftSentinelConnectionName')]",
+            "type": "Microsoft.Web/connections",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[variables('MicrosoftSentinelConnectionName')]",
+                "parameterValueType": "Alternative",
+                "api": {
+                    "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlayBookName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "dependsOn":  [
+                "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]"
+                ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "For_each": {
+                            "foreach": "@body('エンティティ_-_IP_を取得')?['IPs']",
+                            "actions": {
+                                "HTTP_Register_IoC": {
+                                    "type": "Http",
+                                    "inputs": {
+                                        "uri": "https://api.securitycenter.microsoft.com/api/indicators",
+                                        "method": "POST",
+                                        "headers": {
+                                            "Content-Type": "application/json"
+                                        },
+                                        "body": {
+                                            "indicatorValue": "@{item()?['Address']}",
+                                            "indicatorType": "IpAddress",
+                                            "action": "AlertAndBlock",
+                                            "severity": "High",
+                                            "title": "Sentinel自動登録: @{triggerBody()?['object']?['properties']?['title']}",
+                                            "description": "Sentinelインシデントより自動登録",
+                                            "expirationTime": "@{addDays(utcNow(), 30)}"
+                                        },
+                                        "authentication": {
+                                            "type": "ActiveDirectoryOAuth",
+                                            "authority": "https://login.microsoftonline.com",
+                                            "tenant": "[parameters('AadTenantId')]",
+                                            "audience": "https://api.securitycenter.microsoft.com",
+                                            "clientId": "[parameters('AadClientId')]",
+                                            "secret": "[parameters('AadClientSecret')]"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "エンティティ_-_IP_を取得": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Add_comment": {
+                            "runAfter": {
+                                "For_each": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                    "message": "<p class=\"editor-paragraph\">IoC自動登録完了</p>"
+                                },
+                                "path": "/Incidents/Comment"
+                            }
+                        },
+                        "エンティティ_-_IP_を取得": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/ip"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
