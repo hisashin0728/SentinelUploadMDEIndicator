@@ -205,7 +205,7 @@
                                 "and": [
                                     {
                                         "greater": [
-                                            "@length(body('GetEntityIp'))",
+                                            "@length(coalesce(body('GetEntityIp')?['IPs'], json('[]')))",
                                             0
                                         ]
                                     }
